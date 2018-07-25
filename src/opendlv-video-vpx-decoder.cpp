@@ -23,6 +23,7 @@
 #include <libyuv.h>
 #include <X11/Xlib.h>
 
+#include <atomic>
 #include <cstdint>
 #include <cstring>
 #include <iostream>
@@ -33,7 +34,7 @@ int32_t main(int32_t argc, char **argv) {
     auto commandlineArguments = cluon::getCommandlineArguments(argc, argv);
     if ( (0 == commandlineArguments.count("cid")) ||
          (0 == commandlineArguments.count("name")) ) {
-        std::cerr << argv[0] << " listens for VP90 frames in an OD4Session to decode as ARGB image data into a shared memory area." << std::endl;
+        std::cerr << argv[0] << " listens for VP80 or VP90 frames in an OD4Session to decode as ARGB image data into a shared memory area." << std::endl;
         std::cerr << "Usage:   " << argv[0] << " --cid=<OpenDaVINCI session> --name=<name of shared memory area> [--verbose]" << std::endl;
         std::cerr << "         --cid:     CID of the OD4Session to listen for h264 frames" << std::endl;
         std::cerr << "         --id:      when using several instances, only decode VP90 with this senderStamp" << std::endl;
@@ -46,43 +47,60 @@ int32_t main(int32_t argc, char **argv) {
         const bool VERBOSE{commandlineArguments.count("verbose") != 0};
         const uint32_t ID{(commandlineArguments["id"].size() != 0) ? static_cast<uint32_t>(std::stoi(commandlineArguments["id"])) : 0};
 
-        vpx_codec_ctx_t codec;
-        memset(&codec, 0, sizeof(codec));
-        vpx_codec_err_t result = vpx_codec_dec_init(&codec, &vpx_codec_vp9_dx_algo, nullptr, 0);
-        if (result) {
-            std::cerr << argv[0] << ": Failed to initialize decoder: " << vpx_codec_err_to_string(result) << std::endl;
-            return retCode;
-        }
-        else {
-            std::clog << argv[0] << ": Using " << vpx_codec_iface_name(&vpx_codec_vp9_dx_algo) << std::endl;
-        }
-
         // Interface to a running OpenDaVINCI session (ignoring any incoming Envelopes).
         cluon::OD4Session od4{static_cast<uint16_t>(std::stoi(commandlineArguments["cid"]))};
 
         std::unique_ptr<cluon::SharedMemory> sharedMemory(nullptr);
 
+        std::atomic<bool> running{true};
+        vpx_codec_ctx_t codec;
         Display *display{nullptr};
         Visual *visual{nullptr};
         Window window{0};
         XImage *ximage{nullptr};
 
-        auto onNewImage = [&codec, &sharedMemory, &display, &visual, &window, &ximage, &NAME, &VERBOSE, &ID](cluon::data::Envelope &&env){
+        auto onNewImage = [&running, &codec, &sharedMemory, &display, &visual, &window, &ximage, &NAME, &VERBOSE, &ID](cluon::data::Envelope &&env){
             if (ID == env.senderStamp()) {
                 opendlv::proxy::ImageReading img = cluon::extractMessage<opendlv::proxy::ImageReading>(std::move(env));
-                if ("VP90" == img.format()) {
+                if ( ("VP80" == img.format()) || ("VP90" == img.format()) ) {
                     const uint32_t WIDTH = img.width();
                     const uint32_t HEIGHT = img.height();
 
                     if (!sharedMemory) {
-                        std::clog << "[opendlv-video-vpx-decoder]: Created shared memory " << NAME << " (" << (WIDTH * HEIGHT * 4) << " bytes) for an ARGB image (width = " << WIDTH << ", height = " << HEIGHT << ")." << std::endl;
-                        sharedMemory.reset(new cluon::SharedMemory{NAME, WIDTH * HEIGHT * 4});
-                        if (VERBOSE) {
-                            display = XOpenDisplay(NULL);
-                            visual = DefaultVisual(display, 0);
-                            window = XCreateSimpleWindow(display, RootWindow(display, 0), 0, 0, WIDTH, HEIGHT, 1, 0, 0);
-                            ximage = XCreateImage(display, visual, 24, ZPixmap, 0, reinterpret_cast<char*>(sharedMemory->data()), WIDTH, HEIGHT, 32, 0);
-                            XMapWindow(display, window);
+                        vpx_codec_err_t result;
+                        memset(&codec, 0, sizeof(codec));
+                        if ("VP80" == img.format()) {
+                            result = vpx_codec_dec_init(&codec, &vpx_codec_vp8_dx_algo, nullptr, 0);
+                            if (!result) {
+                                std::clog << "[opendlv-video-vpx-decoder]: Using " << vpx_codec_iface_name(&vpx_codec_vp8_dx_algo) << std::endl;
+                            }
+                        }
+                        if ("VP90" == img.format()) {
+                            result = vpx_codec_dec_init(&codec, &vpx_codec_vp9_dx_algo, nullptr, 0);
+                            if (!result) {
+                                std::clog << "[opendlv-video-vpx-decoder]: Using " << vpx_codec_iface_name(&vpx_codec_vp9_dx_algo) << std::endl;
+                            }
+                        }
+                        if (result) {
+                            std::cerr << "[opendlv-video-vpx-decoder]: Failed to initialize decoder: " << vpx_codec_err_to_string(result) << std::endl;
+                            running.store(false);
+                        }
+                        else {
+                            sharedMemory.reset(new cluon::SharedMemory{NAME, WIDTH * HEIGHT * 4});
+                            std::clog << "[opendlv-video-vpx-decoder]: Created shared memory " << NAME << " (" << (WIDTH * HEIGHT * 4) << " bytes) for an ARGB image (width = " << WIDTH << ", height = " << HEIGHT << ")." << std::endl;
+
+                            if (!sharedMemory && !sharedMemory->valid()) {
+                                std::cerr << "[opendlv-video-vpx-decoder]: Failed to create shared memory." << std::endl;
+                                running.store(false);
+                            }
+
+                            if (VERBOSE) {
+                                display = XOpenDisplay(NULL);
+                                visual = DefaultVisual(display, 0);
+                                window = XCreateSimpleWindow(display, RootWindow(display, 0), 0, 0, WIDTH, HEIGHT, 1, 0, 0);
+                                ximage = XCreateImage(display, visual, 24, ZPixmap, 0, reinterpret_cast<char*>(sharedMemory->data()), WIDTH, HEIGHT, 32, 0);
+                                XMapWindow(display, window);
+                            }
                         }
                     }
                     if (sharedMemory) {
@@ -116,7 +134,7 @@ int32_t main(int32_t argc, char **argv) {
         // Register lambda to handle incoming frames.
         od4.dataTrigger(opendlv::proxy::ImageReading::ID(), onNewImage);
 
-        while (od4.isRunning()) {
+        while (od4.isRunning() && running.load()) {
             using namespace std::chrono_literals;
             std::this_thread::sleep_for(1s);
         }

@@ -34,7 +34,7 @@ RUN cd tmp && \
 RUN cd tmp && \
     git clone --depth 1 --branch v1.7.0 https://github.com/webmproject/libvpx.git && \
     mkdir build && cd build && \
-    ../libvpx/configure --disable-docs --disable-tools --disable-vp8 --enable-vp9 --enable-realtime-only --enable-libyuv --disable-unit-tests --disable-webm-io --disable-postproc && \
+    ../libvpx/configure --disable-docs --disable-tools --enable-vp8 --enable-vp9 --enable-libyuv --disable-unit-tests --disable-webm-io --disable-postproc && \
     make -j4 && make install
 ADD . /opt/sources
 WORKDIR /opt/sources
