@@ -14,23 +14,24 @@
 # along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
 # Part to build opendlv-video-vpx-decoder.
-FROM ubuntu:18.04 as builder
+FROM alpine:3.7 as builder
 MAINTAINER Christian Berger "christian.berger@gu.se"
-RUN apt-get update -y && \
-    apt-get upgrade -y && \
-    apt-get dist-upgrade -y && \
-    apt-get install -y --no-install-recommends \
-        ca-certificates \
+
+RUN apk update && \
+    apk --no-cache add \
+        diffutils \
         cmake \
-        build-essential \
+        g++ \
         git \
         libx11-dev \
-        yasm \
-        wget
+        make \
+        perl \
+        wget \
+        yasm
 RUN cd tmp && \
     git clone --depth 1 https://chromium.googlesource.com/libyuv/libyuv && \
     cd libyuv &&\
-    make -f linux.mk libyuv.a && cp libyuv.a /usr/lib/x86_64-linux-gnu && cd include && cp -r * /usr/include
+    make -f linux.mk libyuv.a && cp libyuv.a /usr/lib && cd include && cp -r * /usr/include
 RUN cd tmp && \
     git clone --depth 1 --branch v1.7.0 https://github.com/webmproject/libvpx.git && \
     mkdir build && cd build && \
@@ -45,13 +46,15 @@ RUN mkdir build && \
 
 
 # Part to deploy opendlv-video-vpx-decoder.
-FROM ubuntu:18.04
+FROM alpine:3.7
 MAINTAINER Christian Berger "christian.berger@gu.se"
 
-RUN apt-get update -y && \
-    apt-get upgrade -y && \
-    apt-get dist-upgrade -y && \
-    apt-get install -y --no-install-recommends libx11-6
+RUN echo http://dl-4.alpinelinux.org/alpine/edge/main > /etc/apk/repositories && \
+    echo http://dl-4.alpinelinux.org/alpine/edge/community >> /etc/apk/repositories && \
+    echo http://dl-4.alpinelinux.org/alpine/edge/testing >> /etc/apk/repositories && \
+    apk update && \
+    apk --no-cache add \
+        libx11
 
 WORKDIR /usr/bin
 COPY --from=builder /tmp/bin/opendlv-video-vpx-decoder .

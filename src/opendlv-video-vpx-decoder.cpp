@@ -67,7 +67,7 @@ int32_t main(int32_t argc, char **argv) {
                     const uint32_t HEIGHT = img.height();
 
                     if (!sharedMemory) {
-                        vpx_codec_err_t result;
+                        vpx_codec_err_t result{};
                         memset(&codec, 0, sizeof(codec));
                         if ("VP80" == img.format()) {
                             result = vpx_codec_dec_init(&codec, &vpx_codec_vp8_dx_algo, nullptr, 0);
