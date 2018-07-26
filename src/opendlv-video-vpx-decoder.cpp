@@ -54,22 +54,26 @@ int32_t main(int32_t argc, char **argv) {
 
         std::atomic<bool> running{true};
         vpx_codec_ctx_t codec;
+        std::string format{""};
         Display *display{nullptr};
         Visual *visual{nullptr};
         Window window{0};
         XImage *ximage{nullptr};
 
-        auto onNewImage = [&running, &codec, &sharedMemory, &display, &visual, &window, &ximage, &NAME, &VERBOSE, &ID](cluon::data::Envelope &&env){
+        auto onNewImage = [&running, &codec, &format, &sharedMemory, &display, &visual, &window, &ximage, &NAME, &VERBOSE, &ID](cluon::data::Envelope &&env){
             if (ID == env.senderStamp()) {
                 opendlv::proxy::ImageReading img = cluon::extractMessage<opendlv::proxy::ImageReading>(std::move(env));
 
-                // TODO: Check for switching format in between frames.
                 if ( ("VP80" == img.format()) || ("VP90" == img.format()) ) {
                     const uint32_t WIDTH = img.width();
                     const uint32_t HEIGHT = img.height();
 
-                    if (!sharedMemory) {
+                    if (!sharedMemory || (format != img.format())) {
                         vpx_codec_err_t result{};
+                        // Release any previous codecs.
+                        if (!format.empty()) {
+                            vpx_codec_destroy(&codec);
+                        }
                         memset(&codec, 0, sizeof(codec));
                         if ("VP80" == img.format()) {
                             result = vpx_codec_dec_init(&codec, &vpx_codec_vp8_dx_algo, nullptr, 0);
@@ -88,22 +92,28 @@ int32_t main(int32_t argc, char **argv) {
                             running.store(false);
                         }
                         else {
-                            sharedMemory.reset(new cluon::SharedMemory{NAME, WIDTH * HEIGHT * 4});
-                            std::clog << "[opendlv-video-vpx-decoder]: Created shared memory " << NAME << " (" << (WIDTH * HEIGHT * 4) << " bytes) for an ARGB image (width = " << WIDTH << ", height = " << HEIGHT << ")." << std::endl;
+                            if (!sharedMemory) {
+                                sharedMemory.reset(new cluon::SharedMemory{NAME, WIDTH * HEIGHT * 4});
+                                if (!sharedMemory && !sharedMemory->valid()) {
+                                    std::cerr << "[opendlv-video-vpx-decoder]: Failed to create shared memory." << std::endl;
+                                    running.store(false);
+                                }
+                                else {
+                                    std::clog << "[opendlv-video-vpx-decoder]: Created shared memory " << NAME << " (" << (WIDTH * HEIGHT * 4) << " bytes) for an ARGB image (width = " << WIDTH << ", height = " << HEIGHT << ")." << std::endl;
+                                }
 
-                            if (!sharedMemory && !sharedMemory->valid()) {
-                                std::cerr << "[opendlv-video-vpx-decoder]: Failed to create shared memory." << std::endl;
-                                running.store(false);
-                            }
-
-                            if (VERBOSE) {
-                                display = XOpenDisplay(NULL);
-                                visual = DefaultVisual(display, 0);
-                                window = XCreateSimpleWindow(display, RootWindow(display, 0), 0, 0, WIDTH, HEIGHT, 1, 0, 0);
-                                ximage = XCreateImage(display, visual, 24, ZPixmap, 0, reinterpret_cast<char*>(sharedMemory->data()), WIDTH, HEIGHT, 32, 0);
-                                XMapWindow(display, window);
+                                if (VERBOSE) {
+                                    display = XOpenDisplay(NULL);
+                                    visual = DefaultVisual(display, 0);
+                                    window = XCreateSimpleWindow(display, RootWindow(display, 0), 0, 0, WIDTH, HEIGHT, 1, 0, 0);
+                                    ximage = XCreateImage(display, visual, 24, ZPixmap, 0, reinterpret_cast<char*>(sharedMemory->data()), WIDTH, HEIGHT, 32, 0);
+                                    XMapWindow(display, window);
+                                }
                             }
                         }
+
+                        // Continue decoding for this given format.
+                        format = img.format();
                     }
                     if (sharedMemory) {
                         vpx_codec_iter_t it{nullptr};
