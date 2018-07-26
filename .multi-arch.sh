@@ -3,17 +3,17 @@
 VERSION=$1
 
 cat <<EOF >/tmp/multi.yml
-image: chalmersrevere/opendlv-device-gps-ncom-multi:$VERSION
+image: chalmersrevere/opendlv-video-vpx-decoder-multi:$VERSION
 manifests:	
-  - image: chalmersrevere/opendlv-device-gps-ncom-amd64:$VERSION
+  - image: chalmersrevere/opendlv-video-vpx-decoder-amd64:$VERSION
     platform:
       architecture: amd64
       os: linux
-  - image: chalmersrevere/opendlv-device-gps-ncom-armhf:$VERSION
+  - image: chalmersrevere/opendlv-video-vpx-decoder-armhf:$VERSION
     platform:
       architecture: arm
       os: linux
-  - image: chalmersrevere/opendlv-device-gps-ncom-aarch64:$VERSION
+  - image: chalmersrevere/opendlv-video-vpx-decoder-aarch64:$VERSION
     platform:
       architecture: arm64
       os: linux
