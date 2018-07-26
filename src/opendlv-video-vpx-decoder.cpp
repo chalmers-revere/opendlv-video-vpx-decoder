@@ -34,10 +34,10 @@ int32_t main(int32_t argc, char **argv) {
     auto commandlineArguments = cluon::getCommandlineArguments(argc, argv);
     if ( (0 == commandlineArguments.count("cid")) ||
          (0 == commandlineArguments.count("name")) ) {
-        std::cerr << argv[0] << " listens for VP80 or VP90 frames in an OD4Session to decode as ARGB image data into a shared memory area." << std::endl;
+        std::cerr << argv[0] << " listens for VP8 or VP9 frames in an OD4Session to decode as ARGB image data into a shared memory area." << std::endl;
         std::cerr << "Usage:   " << argv[0] << " --cid=<OpenDaVINCI session> --name=<name of shared memory area> [--verbose]" << std::endl;
-        std::cerr << "         --cid:     CID of the OD4Session to listen for h264 frames" << std::endl;
-        std::cerr << "         --id:      when using several instances, only decode VP90 with this senderStamp" << std::endl;
+        std::cerr << "         --cid:     CID of the OD4Session to listen for VP8 or VP9 frames" << std::endl;
+        std::cerr << "         --id:      when using several instances, only decode VP8 or VP9 with this senderStamp" << std::endl;
         std::cerr << "         --name:    name of the shared memory area to create" << std::endl;
         std::cerr << "         --verbose: print decoding information and display image" << std::endl;
         std::cerr << "Example: " << argv[0] << " --cid=111 --name=data --verbose" << std::endl;
@@ -62,6 +62,8 @@ int32_t main(int32_t argc, char **argv) {
         auto onNewImage = [&running, &codec, &sharedMemory, &display, &visual, &window, &ximage, &NAME, &VERBOSE, &ID](cluon::data::Envelope &&env){
             if (ID == env.senderStamp()) {
                 opendlv::proxy::ImageReading img = cluon::extractMessage<opendlv::proxy::ImageReading>(std::move(env));
+
+                // TODO: Check for switching format in between frames.
                 if ( ("VP80" == img.format()) || ("VP90" == img.format()) ) {
                     const uint32_t WIDTH = img.width();
                     const uint32_t HEIGHT = img.height();
