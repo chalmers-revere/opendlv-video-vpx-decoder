@@ -64,24 +64,24 @@ int32_t main(int32_t argc, char **argv) {
             if (ID == env.senderStamp()) {
                 opendlv::proxy::ImageReading img = cluon::extractMessage<opendlv::proxy::ImageReading>(std::move(env));
 
-                if ( ("VP80" == img.format()) || ("VP90" == img.format()) ) {
+                if ( ("VP80" == img.fourcc()) || ("VP90" == img.fourcc()) ) {
                     const uint32_t WIDTH = img.width();
                     const uint32_t HEIGHT = img.height();
 
-                    if (!sharedMemory || (format != img.format())) {
+                    if (!sharedMemory || (format != img.fourcc())) {
                         vpx_codec_err_t result{};
                         // Release any previous codecs.
                         if (!format.empty()) {
                             vpx_codec_destroy(&codec);
                         }
                         memset(&codec, 0, sizeof(codec));
-                        if ("VP80" == img.format()) {
+                        if ("VP80" == img.fourcc()) {
                             result = vpx_codec_dec_init(&codec, &vpx_codec_vp8_dx_algo, nullptr, 0);
                             if (!result) {
                                 std::clog << "[opendlv-video-vpx-decoder]: Using " << vpx_codec_iface_name(&vpx_codec_vp8_dx_algo) << std::endl;
                             }
                         }
-                        if ("VP90" == img.format()) {
+                        if ("VP90" == img.fourcc()) {
                             result = vpx_codec_dec_init(&codec, &vpx_codec_vp9_dx_algo, nullptr, 0);
                             if (!result) {
                                 std::clog << "[opendlv-video-vpx-decoder]: Using " << vpx_codec_iface_name(&vpx_codec_vp9_dx_algo) << std::endl;
@@ -113,7 +113,7 @@ int32_t main(int32_t argc, char **argv) {
                         }
 
                         // Continue decoding for this given format.
-                        format = img.format();
+                        format = img.fourcc();
                     }
                     if (sharedMemory) {
                         vpx_codec_iter_t it{nullptr};
