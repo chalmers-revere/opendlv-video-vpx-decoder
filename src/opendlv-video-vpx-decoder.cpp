@@ -62,6 +62,7 @@ int32_t main(int32_t argc, char **argv) {
 
         auto onNewImage = [&running, &codec, &format, &sharedMemory, &display, &visual, &window, &ximage, &NAME, &VERBOSE, &ID](cluon::data::Envelope &&env){
             if (ID == env.senderStamp()) {
+                cluon::data::TimeStamp sampleTimeStamp = env.sampleTimeStamp();
                 opendlv::proxy::ImageReading img = cluon::extractMessage<opendlv::proxy::ImageReading>(std::move(env));
 
                 if ( ("VP80" == img.fourcc()) || ("VP90" == img.fourcc()) ) {
@@ -128,6 +129,7 @@ int32_t main(int32_t argc, char **argv) {
                         else {
                             while (nullptr != (yuvFrame = vpx_codec_get_frame(&codec, &it))) {
                                 sharedMemory->lock();
+                                sharedMemory->setTimeStamp(sampleTimeStamp);
                                 {
                                     libyuv::I420ToARGB(yuvFrame->planes[VPX_PLANE_Y], yuvFrame->stride[VPX_PLANE_Y], yuvFrame->planes[VPX_PLANE_U], yuvFrame->stride[VPX_PLANE_U], yuvFrame->planes[VPX_PLANE_V], yuvFrame->stride[VPX_PLANE_V], reinterpret_cast<uint8_t*>(sharedMemory->data()), WIDTH * 4, WIDTH, HEIGHT);
                                     if (VERBOSE) {

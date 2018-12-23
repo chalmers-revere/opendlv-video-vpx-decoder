@@ -34,7 +34,7 @@ section to your `docker-compose.yml`:
 version: '2' # Must be present exactly once at the beginning of the docker-compose.yml file
 services:    # Must be present exactly once at the beginning of the docker-compose.yml file
     video-vpx-decoder:
-        image: chalmersrevere/opendlv-video-vpx-decoder-multi:v0.0.5
+        image: chalmersrevere/opendlv-video-vpx-decoder-multi:v0.0.6
         restart: on-failure
         network_mode: "host"
         ipc: "host"
